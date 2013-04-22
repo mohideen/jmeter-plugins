@@ -8,10 +8,12 @@
  */
 package com.atlantbh.jmeter.plugins.hadooputilities.hdfsoperations;
 
+import java.io.File;
 import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.jmeter.samplers.AbstractSampler;
 import org.apache.jmeter.samplers.Entry;
 import org.apache.jmeter.samplers.SampleResult;
@@ -38,9 +40,16 @@ public class HdfsOperations extends AbstractSampler {
 
     ;
 	
-	public HdfsOperations(String nameNode) throws IOException {
-        config = new Configuration();
+	  public HdfsOperations(String nameNode) throws IOException {
+    	  config = new Configuration();
         config.set("fs.default.name", nameNode);
+        File coreSite = new File("/etc/hadoop/core-site.xml");
+        File hdfsSite = new File("/etc/hadoop/hdfs-site.xml");
+        if(coreSite.exists() && hdfsSite.exists()) {
+          config.clear();
+          config.addResource(new Path(coreSite.getPath()));
+          config.addResource(new Path(hdfsSite.getPath()));
+        }
         hdfs = FileSystem.get(config);
     }
 
@@ -85,26 +94,41 @@ public class HdfsOperations extends AbstractSampler {
     }
 
     private void initializeConnection() throws IOException {
-        config = new Configuration();
-        config.set("fs.default.name", this.getNameNode());
-        hdfs = FileSystem.get(config);
+      config = new Configuration();
+      config.set("fs.default.name", this.getNameNode());
+      File coreSite = new File("/etc/hadoop/core-site.xml");
+      File hdfsSite = new File("/etc/hadoop/hdfs-site.xml");
+      if(coreSite.exists() && hdfsSite.exists()) {
+        config.clear();
+        config.addResource(new Path(coreSite.getPath()));
+        config.addResource(new Path(hdfsSite.getPath()));
+      }
+      hdfs = FileSystem.get(config);
     }
 
     private void copyFileToHDFS() throws IOException {
         Path localPath = new Path(this.getInputFilePath());
         Path hdfsPath = new Path(this.getOutputFilePath());
+        
+        hdfs.create(hdfs, hdfsPath, new FsPermission("755"));
 
         String fileName = localPath.getName();
         Path hdfsFileLocation = new Path(this.getOutputFilePath() + "/" + fileName);
-
-        if (!hdfs.exists(hdfsFileLocation)) {
+        
+        try {
+          hdfs.copyFromLocalFile(false, true, localPath, hdfsPath);
+          this.setUploadSuccess("File " + fileName + " copied to HDFS on location: " + hdfsPath);
+        } catch(IOException e) {
+          throw e;
+        }
+        /*if (!hdfs.exists(hdfsFileLocation)) {
             hdfs.copyFromLocalFile(localPath, hdfsPath);
             this.setUploadSuccess("File " + fileName + " copied to HDFS on location: " + hdfsPath);
         } else {
             this.setUploadSuccess("File " + fileName + " already exists on HDFS on location: " + hdfsPath);
-        }
+        }*/
 
-        hdfs.close();
+        //hdfs.close();
     }
 
     @Override
